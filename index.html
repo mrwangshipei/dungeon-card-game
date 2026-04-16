@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地下城探索卡牌游戏</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h1 class="game-title">⚔️ 地下城探索 ⚔️</h1>
+
+    <div class="game-container">
+        <div class="top-bar">
+            <div class="stat">
+                <span>❤️ HP</span>
+                <div class="stat-bar"><div class="stat-fill hp-fill" id="hpBar" style="width:100%"></div></div>
+                <span id="hpText">100/100</span>
+            </div>
+            <div class="stat">
+                <span>⚡ 能量</span>
+                <div class="energy-pips" id="energyPips">
+                    <div class="energy-pip active"></div>
+                    <div class="energy-pip active"></div>
+                    <div class="energy-pip active"></div>
+                </div>
+            </div>
+            <div class="stat">
+                <span>🍖 饱食</span>
+                <div class="stat-bar"><div class="stat-fill food-fill" id="foodBar" style="width:100%"></div></div>
+                <span id="foodText">100/100</span>
+            </div>
+            <div class="stat">
+                <span>🛡️ 护盾</span>
+                <div class="stat-bar"><div class="stat-fill shield-fill" id="shieldBar" style="width:0%"></div></div>
+                <span id="shieldText">0</span>
+            </div>
+            <div class="stat gold-display">
+                <span>💰 金币: <span id="goldText">0</span></span>
+            </div>
+            <div class="stat">
+                <span>📍 楼层: <span id="levelText">1</span></span>
+            </div>
+        </div>
+
+        <div class="main-area">
+            <div class="map-container">
+                <canvas id="gameCanvas" width="440" height="440"></canvas>
+            </div>
+
+            <div class="info-panel">
+                <div class="info-title" id="panelTitle">探索地牢</div>
+                <div class="event-text" id="eventText">点击地图上的格子开始探索。消耗饱食度移动，遭遇敌人时进入战斗。</div>
+
+                <div class="enemy-info hidden" id="enemyInfo">
+                    <div id="enemyName" style="font-size:18px;color:#ff4444;">敌人</div>
+                    <div class="enemy-hp-bar"><div class="enemy-hp-fill" id="enemyHpBar" style="width:100%"></div></div>
+                    <div id="enemyHpText">30/30</div>
+                    <div id="enemyTrait" style="font-size:12px;color:#888;margin-top:5px;"></div>
+                </div>
+
+                <div class="status-effects" id="statusEffects"></div>
+
+                <div class="cards-container">
+                    <div class="cards-title">🎴 手牌 (<span id="deckCount">0</span>牌库/<span id="discardCount">0</span>弃牌)</div>
+                    <div class="cards-hand" id="cardsHand"></div>
+                </div>
+
+                <div class="buttons" id="actionButtons">
+                    <button class="btn" id="btnDraw" onclick="Game.drawCards(2)">抽牌</button>
+                    <button class="btn" id="btnEndTurn" onclick="Game.endTurn()">结束回合</button>
+                    <button class="btn success" id="btnConfirm" onclick="Game.confirmAction()">确认</button>
+                    <button class="btn danger hidden" id="btnFlee" onclick="Game.fleeEnemy()">逃跑</button>
+                </div>
+
+                <div class="log-container" id="logContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay hidden" id="gameOverOverlay">
+        <div class="modal">
+            <h2 id="gameOverTitle">游戏结束</h2>
+            <p id="gameOverText"></p>
+            <p class="gold-display">获得金币: <span id="finalGold">0</span></p>
+            <button class="btn" onclick="Game.restart()">重新开始</button>
+        </div>
+    </div>
+
+    <div class="overlay hidden" id="startOverlay">
+        <div class="modal">
+            <h2>🗡️ 地下城探索 🗡️</h2>
+            <p>在地牢中探索，击败敌人，收集卡牌和宝藏！</p>
+            <p>💡 点击地图移动，消耗饱食度</p>
+            <p>💡 合理使用能量和卡牌</p>
+            <p>💡 饱食度为0时每步损失HP</p>
+            <button class="btn" onclick="Game.start()">开始冒险</button>
+        </div>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="state.js"></script>
+    <script src="ui.js"></script>
+    <script src="deck.js"></script>
+    <script src="combat.js"></script>
+    <script src="renderer.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
