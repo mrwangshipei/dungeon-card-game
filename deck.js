@@ -2,11 +2,23 @@
 const DeckManager = {
     generateStartingDeck() {
         const deck = [];
-        for (let i = 0; i < 3; i++) deck.push({...CARDS[0]});
-        for (let i = 0; i < 2; i++) deck.push({...CARDS[1]});
-        for (let i = 0; i < 2; i++) deck.push({...CARDS[3]});
-        deck.push({...CARDS[5]});
-        deck.push({...CARDS[6]});
+        // 费用0
+        for (let i = 0; i < 3; i++) deck.push({...CARDS[0]}); // 轻拳 x3
+        for (let i = 0; i < 2; i++) deck.push({...CARDS[1]}); // 嘲讽 x2
+        deck.push({...CARDS[2]}); // 观察 x1
+        deck.push({...CARDS[4]}); // 紧急防御 x1
+
+        // 费用1
+        for (let i = 0; i < 2; i++) deck.push({...CARDS[5]}); // 防御姿态 x2
+        for (let i = 0; i < 2; i++) deck.push({...CARDS[6]}); // 连击 x2
+        for (let i = 0; i < 2; i++) deck.push({...CARDS[7]}); // 进食 x2
+        deck.push({...CARDS[8]}); // 快攻 x1
+
+        // 费用2
+        deck.push({...CARDS[11]}); // 重拳 x1
+        deck.push({...CARDS[12]}); // 铁壁 x1
+        deck.push({...CARDS[14]}); // 致命 x1
+
         this.shuffle(deck);
         return deck;
     },
@@ -19,7 +31,22 @@ const DeckManager = {
     },
 
     drawCards(gs, count) {
+        // 免费抽牌次数先扣除
+        if (gs.freeDraws > 0) {
+            const freeCount = Math.min(gs.freeDraws, count);
+            gs.freeDraws -= freeCount;
+            count -= freeCount;
+            if (count === 0) return;
+        }
+
         for (let i = 0; i < count; i++) {
+            // 抽牌消耗饱食度
+            if (gs.food > 0) {
+                gs.food = Math.max(0, gs.food - 3);
+            } else {
+                gs.hp = Math.max(1, gs.hp - 5);
+            }
+
             if (gs.deck.length === 0) {
                 if (gs.discardPile.length === 0) {
                     gs.deck = this.generateStartingDeck();
@@ -57,14 +84,9 @@ const DeckManager = {
     },
 
     getRandomCard() {
-        const weights = [3, 3, 3, 4, 4, 4, 4, 3, 3, 3];
-        const total = weights.reduce((a, b) => a + b, 0);
-        let r = Math.floor(Math.random() * total);
-        for (let i = 0; i < weights.length; i++) {
-            r -= weights[i];
-            if (r < 0) return {...CARDS[i]};
-        }
-        return {...CARDS[0]};
+        // 随机抽取一张非0费卡牌（高费稀有）
+        const highCostCards = CARDS.filter(c => c.cost >= 2);
+        return {...highCostCards[Math.floor(Math.random() * highCostCards.length)]};
     },
 
     reshuffleDiscardToDeck(gs) {

@@ -67,6 +67,13 @@ body {
     background: radial-gradient(circle, #ffd700, #ff8c00);
     box-shadow: 0 0 10px rgba(255,215,0,0.8);
 }
+.energy-pip {
+    transition: all 0.3s;
+}
+.energy-pip:not(.active) {
+    background: #333;
+    opacity: 0.5;
+}
 .main-area {
     display: flex;
     gap: 20px;
@@ -155,6 +162,23 @@ body {
     transform: translateY(-5px);
     box-shadow: 0 5px 20px rgba(212,175,55,0.5);
 }
+.card.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: grayscale(50%);
+}
+.card.disabled:hover {
+    transform: none;
+    box-shadow: none;
+}
+.card.usable {
+    cursor: pointer;
+    animation: cardGlow 1.5s ease-in-out infinite;
+}
+@keyframes cardGlow {
+    0%, 100% { box-shadow: 0 0 5px rgba(68,255,68,0.3); }
+    50% { box-shadow: 0 0 15px rgba(68,255,68,0.6); }
+}
 .card.attack { border-color: #ff4444; }
 .card.defense { border-color: #4a90d9; }
 .card.skill { border-color: #44ff44; }
@@ -212,6 +236,13 @@ body {
     cursor: not-allowed;
     transform: none;
 }
+.btn.usable {
+    animation: btnGlow 1.5s ease-in-out infinite;
+}
+@keyframes btnGlow {
+    0%, 100% { box-shadow: 0 0 5px rgba(68,255,68,0.3); }
+    50% { box-shadow: 0 0 15px rgba(68,255,68,0.6); }
+}
 .btn.danger { background: linear-gradient(145deg, #8b0000, #5a0000); color: #fff; }
 .btn.success { background: linear-gradient(145deg, #228b22, #1a6b1a); color: #fff; }
 .log-container {
@@ -267,3 +298,27 @@ body {
 .status-icon.weak { background: rgba(128,128,128,0.5); border-color: #808080; }
 .status-icon.shield { background: rgba(74,144,217,0.5); border-color: #4a90d9; }
 .gold-display { color: #ffd700; font-size: 16px; }
+.choice-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 15px;
+}
+.choice-btn {
+    padding: 12px 20px;
+    background: linear-gradient(145deg, #3d2b5d, #2d1b4d);
+    border: 2px solid #d4af37;
+    border-radius: 8px;
+    color: #f0d78c;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+.choice-btn:hover:not(:disabled) {
+    background: linear-gradient(145deg, #5d3b7d, #4d2b5d);
+    transform: translateX(5px);
+}
+.choice-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

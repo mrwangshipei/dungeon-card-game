@@ -20,76 +20,97 @@ const Game = {
             shield: 0,
             gold: 0,
             level: 1,
-            playerX: 0, playerY: 0,
-            exitX: 9, exitY: 9,
+            currentNode: null,  // 当前树节点
+            path: [],           // 走过的路径
+            depth: 0,           // 当前深度
+            treeDepth: 10,      // 树的总深度
             currentEnemy: null,
             deck: DeckManager.generateStartingDeck(),
             hand: [],
             discardPile: [],
-            map: [],
-            explored: [],
             poisoned: false,
             weakened: false,
             enemyStunned: false,
-            turnCount: 0
+            turnCount: 0,
+            // 战斗状态
+            comboUsedThisTurn: false,
+            attackBoosted: false,
+            enemyWeakened: false,
+            reduceNextDamage: false,
+            poisonSelfTurns: 0,
+            nextTurnHpCost: 0,
+            invincibleTurns: 0,
+            cantAttackThisTurn: false,
+            defenseUsedThisTurn: false,
+            reflectNextAttack: false,
+            nextTurnEnergyBonus: 0,
+            // 永久增益
+            freeDraws: 0,
+            attackBonus: 0,
+            doubleRewardNextBattle: false,
+            // 探索状态
+            trapNextMove: false
         };
     },
 
+    // 生成二叉树地图
     generateMap() {
         const gs = this.state;
-        gs.map = [];
-        gs.explored = [];
+        gs.treeDepth = 10 + gs.level - 1;  // 每层增加深度
 
-        for (let y = 0; y < 10; y++) {
-            gs.map[y] = [];
-            gs.explored[y] = [];
-            for (let x = 0; x < 10; x++) {
-                gs.map[y][x] = { type: 'empty', revealed: false };
-                gs.explored[y][x] = false;
-            }
+        // 创建二叉树
+        gs.mapTree = this.createTree(gs.treeDepth);
+
+        // 从根节点开始
+        gs.currentNode = gs.mapTree;
+        gs.path = [gs.mapTree];
+        gs.depth = 0;
+    },
+
+    // 递归创建二叉树
+    createTree(depth, parent = null) {
+        if (depth <= 0) return null;
+
+        const gs = this.state;
+        const node = {
+            depth: depth,
+            parent: parent,
+            left: null,
+            right: null,
+            type: 'empty',
+            enemy: null,
+            revealed: false,
+            visited: depth === gs.treeDepth  // 起始节点标记为已访问
+        };
+
+        // 根节点是终点
+        if (depth === 1) {
+            node.type = 'exit';
+            node.revealed = true;
+            return node;
         }
 
-        gs.playerX = 0;
-        gs.playerY = 0;
-        gs.map[0][0].type = 'start';
-        gs.map[0][0].revealed = true;
-        gs.explored[0][0] = true;
-
-        gs.exitX = 9;
-        gs.exitY = 9;
-        gs.map[9][9].type = 'exit';
-
-        const positions = [];
-        for (let y = 0; y < 10; y++) {
-            for (let x = 0; x < 10; x++) {
-                if ((x === 0 && y === 0) || (x === 9 && y === 9)) continue;
-                positions.push({x, y});
-            }
-        }
-        DeckManager.shuffle(positions);
-
-        const enemyCount = 5 + Math.floor(gs.level * 1.5);
-        for (let i = 0; i < enemyCount && i < positions.length; i++) {
-            const pos = positions[i];
-            const enemy = this.getRandomEnemyForLevel();
-            gs.map[pos.y][pos.x] = { type: 'enemy', enemy: enemy, revealed: false };
+        // 随机决定节点类型
+        const rand = Math.random();
+        if (rand < 0.35) {
+            node.type = 'enemy';
+            node.enemy = this.getRandomEnemyForLevel();
+        } else if (rand < 0.6) {
+            node.type = 'reward';
+        } else if (rand < 0.75) {
+            node.type = 'danger';
         }
 
-        const rewardCount = 3 + Math.floor(gs.level * 0.5);
-        for (let i = enemyCount; i < enemyCount + rewardCount && i < positions.length; i++) {
-            const pos = positions[i];
-            gs.map[pos.y][pos.x] = { type: 'reward', revealed: false };
-        }
+        node.left = this.createTree(depth - 1, node);
+        node.right = this.createTree(depth - 1, node);
 
-        const dangerCount = 3 + Math.floor(gs.level * 0.3);
-        for (let i = enemyCount + rewardCount; i < enemyCount + rewardCount + dangerCount && i < positions.length; i++) {
-            const pos = positions[i];
-            gs.map[pos.y][pos.x] = { type: 'danger', revealed: false };
-        }
+        return node;
     },
 
     getRandomEnemyForLevel() {
-        const level = this.state.level;
+        const gs = this.state;
+        if (!gs) return {...ENEMIES[0]};
+        const level = gs.level || 1;
         let pool;
         if (level <= 2) {
             pool = ENEMIES.filter(e => e.rarity === 'weak');
@@ -98,19 +119,111 @@ const Game = {
         } else {
             pool = [...ENEMIES];
         }
-        return pool[Math.floor(Math.random() * pool.length)];
+        return {...pool[Math.floor(Math.random() * pool.length)]};
+    },
+
+    // 获取当前深度的可用节点
+    getAvailableNodes() {
+        const gs = this.state;
+        const nodes = [];
+
+        // 当前节点
+        if (gs.currentNode && !gs.currentNode.visited) {
+            nodes.push(gs.currentNode);
+        }
+
+        // 下两个深度的节点
+        const addChildren = (node, targetDepth, currentDepth = 0) => {
+            if (!node || currentDepth >= targetDepth) return;
+
+            if (currentDepth + 1 === targetDepth) {
+                if (node.left && !node.left.visited) nodes.push(node.left);
+                if (node.right && !node.right.visited) nodes.push(node.right);
+            } else {
+                addChildren(node.left, targetDepth, currentDepth + 1);
+                addChildren(node.right, targetDepth, currentDepth + 1);
+            }
+        };
+
+        addChildren(gs.currentNode, 2);
+
+        return nodes;
+    },
+
+    // 点击树节点移动
+    handleNodeClick(node) {
+        if (!this.canMove()) {
+            this.addLog('当前无法移动!', 'event');
+            return;
+        }
+
+        // 检查节点是否可访问
+        const available = this.getAvailableNodes();
+        if (!available.includes(node)) {
+            this.addLog('无法到达这里!', 'event');
+            return;
+        }
+
+        // 移动到节点
+        this.moveToNode(node);
+    },
+
+    moveToNode(node) {
+        const gs = this.state;
+
+        // 消耗饱食度
+        if (gs.food > 0) {
+            gs.food = Math.max(0, gs.food - 5);
+        } else {
+            CombatSystem.takeDamage(gs, 10);
+            this.addLog('饥饿损失! -10HP', 'damage');
+        }
+
+        // 陷阱效果
+        if (gs.trapNextMove) {
+            gs.trapNextMove = false;
+            CombatSystem.takeDamage(gs, 15);
+            this.addLog('触发陷阱! -15HP', 'damage');
+        }
+
+        // 中毒效果
+        if (gs.poisoned) {
+            CombatSystem.takeDamage(gs, 5);
+            this.addLog('中毒损失! -5HP', 'damage');
+        }
+
+        // 标记为已访问
+        node.visited = true;
+        node.revealed = true;
+
+        // 更新路径
+        gs.path.push(node);
+        gs.currentNode = node;
+        gs.depth++;
+
+        // 处理节点事件
+        if (node.type === 'exit') {
+            this.handleLevelComplete();
+        } else if (node.type === 'enemy') {
+            this.startBattle(node.enemy);
+        } else if (node.type === 'reward') {
+            this.handleReward();
+        } else if (node.type === 'danger') {
+            this.handleDanger();
+        } else {
+            // 普通节点，继续探索
+            UIManager.setPanel('探索地牢', '选择左或右边继续前进...', false);
+        }
+
+        UIManager.render(gs);
+        Renderer.drawMap();
+        this.checkGameOver();
     },
 
     getAdjacentTiles() {
-        const px = this.state.playerX;
-        const py = this.state.playerY;
-        return [
-            {x: px-1, y: py}, {x: px+1, y: py},
-            {x: px, y: py-1}, {x: px, y: py+1}
-        ].filter(t => t.x >= 0 && t.x < 10 && t.y >= 0 && t.y < 10);
+        // 返回可用节点用于渲染
+        return this.getAvailableNodes();
     },
-
-    // ============ 状态检查 ============
 
     canMove() {
         return GameState.current === GameState.EXPLORING;
@@ -132,60 +245,6 @@ const Game = {
         return GameState.current === GameState.EXPLORING || GameState.current === GameState.BATTLE;
     },
 
-    // ============ 核心动作 ============
-
-    handleTileClick(x, y) {
-        if (!this.canMove()) {
-            this.addLog('当前无法移动!', 'event');
-            return;
-        }
-
-        const adjacent = this.getAdjacentTiles();
-        const isAdjacent = adjacent.some(t => t.x === x && t.y === y);
-
-        if (!isAdjacent) {
-            this.addLog('只能移动到相邻格子', 'event');
-            return;
-        }
-
-        const gs = this.state;
-
-        // 消耗饱食度
-        if (gs.food > 0) {
-            gs.food = Math.max(0, gs.food - 5);
-        } else {
-            CombatSystem.takeDamage(gs, 10);
-            this.addLog('饥饿损失! -10HP', 'damage');
-        }
-
-        // 中毒效果
-        if (gs.poisoned) {
-            CombatSystem.takeDamage(gs, 5);
-            this.addLog('中毒损失! -5HP', 'damage');
-        }
-
-        // 移动
-        gs.playerX = x;
-        gs.playerY = y;
-        gs.explored[y][x] = true;
-        gs.map[y][x].revealed = true;
-
-        // 根据目标类型转换状态
-        if (x === gs.exitX && y === gs.exitY) {
-            this.handleLevelComplete();
-        } else if (gs.map[y][x].type === 'enemy') {
-            this.startBattle(gs.map[y][x].enemy);
-        } else if (gs.map[y][x].type === 'reward') {
-            this.handleReward();
-        } else if (gs.map[y][x].type === 'danger') {
-            this.handleDanger();
-        }
-
-        UIManager.render(gs);
-        Renderer.drawMap();
-        this.checkGameOver();
-    },
-
     handleLevelComplete() {
         GameState.forceSet(GameState.LEVEL_COMPLETE);
         this.addLog('到达下一层!', 'event');
@@ -203,23 +262,51 @@ const Game = {
     handleReward() {
         GameState.forceSet(GameState.REWARD);
         const event = POSITIVE_EVENTS[Math.floor(Math.random() * POSITIVE_EVENTS.length)];
-        const msg = event.effect(this.state);
-        this.addLog(msg, 'heal');
-        UIManager.setPanel('🎉 奖励', event.text, false);
+
+        if (event.canChoose) {
+            UIManager.showChoicePanel('🎉 奖励', event.text, event.choices, () => {
+                const msg = event.effect(this.state);
+                this.addLog(msg, 'heal');
+                this.continueGame();
+            });
+        } else if (event.random) {
+            const success = Math.random() < 0.5;
+            const msg = success ? event.positiveEffect(this.state) : event.negativeEffect(this.state);
+            this.addLog(msg, success ? 'heal' : 'damage');
+            UIManager.setPanel('🎉 奖励', event.text + '<br>' + msg, false);
+        } else {
+            const msg = event.effect(this.state);
+            this.addLog(msg, 'heal');
+            UIManager.setPanel('🎉 奖励', event.text, false);
+        }
     },
 
     handleDanger() {
         GameState.forceSet(GameState.DANGER);
         const event = NEGATIVE_EVENTS[Math.floor(Math.random() * NEGATIVE_EVENTS.length)];
-        const msg = event.effect(this.state);
-        this.addLog(msg, 'damage');
-        UIManager.setPanel('⚠️ 危险', event.text, false);
+
+        if (event.canChoose) {
+            UIManager.showChoicePanel('⚠️ 危险', event.text, event.choices, () => {
+                const msg = event.effect(this.state);
+                this.addLog(msg, 'damage');
+                this.continueGame();
+            });
+        } else if (event.random) {
+            const success = Math.random() < 0.5;
+            const msg = success ? event.positiveEffect(this.state) : event.negativeEffect(this.state);
+            this.addLog(msg, 'damage');
+            UIManager.setPanel('⚠️ 危险', event.text + '<br>' + msg, false);
+        } else {
+            const msg = event.effect(this.state);
+            this.addLog(msg, 'damage');
+            UIManager.setPanel('⚠️ 危险', event.text, false);
+        }
     },
 
     continueGame() {
         if (GameState.current === GameState.REWARD || GameState.current === GameState.DANGER) {
             GameState.setState(GameState.EXPLORING);
-            UIManager.setPanel('探索地牢', '点击地图上的格子开始探索。消耗饱食度移动，遭遇敌人时进入战斗。', false);
+            UIManager.setPanel('探索地牢', '选择左或右边继续前进...', false);
         }
     },
 
@@ -321,6 +408,7 @@ const Game = {
 
         const gs = this.state;
         gs.turnCount++;
+        CombatSystem.onTurnStart(gs, (msg, type) => this.addLog(msg, type));
         gs.energy = gs.maxEnergy;
         DeckManager.drawCards(gs, 2);
 
@@ -359,7 +447,16 @@ const Game = {
             this.continueGame();
         } else if (GameState.current === GameState.LEVEL_COMPLETE) {
             GameState.forceSet(GameState.EXPLORING);
-            UIManager.setPanel('探索地牢', '点击地图上的格子开始探索。消耗饱食度移动，遭遇敌人时进入战斗。', false);
+            UIManager.setPanel('探索地牢', '选择左或右边继续前进...', false);
+        }
+    },
+
+    confirmChoice(choiceIndex) {
+        if (this.currentChoices && this.currentChoices[choiceIndex]) {
+            const choice = this.currentChoices[choiceIndex];
+            if (!choice.cost || this.state.gold >= choice.cost) {
+                this.onConfirmChoice();
+            }
         }
     },
 

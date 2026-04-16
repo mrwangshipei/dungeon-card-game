@@ -28,17 +28,22 @@ const UIManager = {
     },
 
     updateHand(hand) {
+        const canUse = Game.canUseCard();
+        const gs = Game.state;
         const handDiv = document.getElementById('cardsHand');
         handDiv.innerHTML = '';
         hand.forEach((card, idx) => {
             const cardDiv = document.createElement('div');
-            cardDiv.className = `card ${card.type}`;
+            const canPlay = canUse && gs.energy >= card.cost;
+            cardDiv.className = `card ${card.type}${canPlay ? ' usable' : ' disabled'}`;
             cardDiv.innerHTML = `
                 <div class="card-cost">${card.cost}</div>
                 <div class="card-name">${card.name}</div>
                 <div class="card-effect">${card.desc}</div>
             `;
-            cardDiv.onclick = () => Game.useCard(idx);
+            if (canPlay) {
+                cardDiv.onclick = () => Game.useCard(idx);
+            }
             handDiv.appendChild(cardDiv);
         });
     },
@@ -61,9 +66,17 @@ const UIManager = {
         const btnEndTurn = document.getElementById('btnEndTurn');
         const btnFlee = document.getElementById('btnFlee');
 
-        btnDraw.disabled = !Game.canDrawCards();
-        btnEndTurn.disabled = !Game.canEndTurn();
-        btnFlee.classList.toggle('hidden', !Game.canFlee());
+        const canDraw = Game.canDrawCards();
+        const canEndTurn = Game.canEndTurn();
+        const canFlee = Game.canFlee();
+
+        btnDraw.disabled = !canDraw;
+        btnEndTurn.disabled = !canEndTurn;
+        btnFlee.classList.toggle('hidden', !canFlee);
+
+        btnDraw.classList.toggle('usable', canDraw);
+        btnEndTurn.classList.toggle('usable', canEndTurn);
+        btnFlee.classList.toggle('usable', canFlee);
     },
 
     updateEnemy(enemy) {
@@ -97,6 +110,20 @@ const UIManager = {
     setPanel(title, text, appendState = true) {
         document.getElementById('panelTitle').textContent = title;
         document.getElementById('eventText').innerHTML = text + (appendState ? `<br><small>[${GameState.getDescription()}]</small>` : '');
+    },
+
+    showChoicePanel(title, text, choices, onConfirm) {
+        const panel = document.getElementById('eventPanel');
+        document.getElementById('panelTitle').textContent = title;
+        let html = text + '<div class="choice-buttons">';
+        choices.forEach((choice, idx) => {
+            const canAfford = !choice.cost || Game.state.gold >= choice.cost;
+            html += `<button class="choice-btn" ${canAfford ? '' : 'disabled'} onclick="Game.confirmChoice(${idx})">${choice.text}</button>`;
+        });
+        html += '</div>';
+        document.getElementById('eventText').innerHTML = html;
+        Game.currentChoices = choices;
+        Game.onConfirmChoice = onConfirm;
     },
 
     showOverlay(id) {

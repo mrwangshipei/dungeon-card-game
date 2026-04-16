@@ -2,6 +2,9 @@
 const Renderer = {
     canvas: null,
     ctx: null,
+    nodeWidth: 80,
+    nodeHeight: 50,
+    levelOffset: 30,
 
     init() {
         this.canvas = document.getElementById('gameCanvas');
@@ -9,72 +12,199 @@ const Renderer = {
 
         this.canvas.addEventListener('click', (e) => {
             const rect = this.canvas.getBoundingClientRect();
-            const x = Math.floor((e.clientX - rect.left) / 44);
-            const y = Math.floor((e.clientY - rect.top) / 44);
-            if (x >= 0 && x < 10 && y >= 0 && y < 10) {
-                Game.handleTileClick(x, y);
-            }
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            this.handleClick(x, y);
         });
+    },
+
+    handleClick(x, y) {
+        const gs = Game.state;
+        if (!gs || !gs.mapTree) return;
+
+        const canMove = Game.canMove();
+        if (!canMove) return;
+
+        const availableNodes = Game.getAvailableNodes();
+
+        for (const node of availableNodes) {
+            const pos = this.getNodePosition(node);
+            if (x >= pos.x && x <= pos.x + this.nodeWidth &&
+                y >= pos.y && y <= pos.y + this.nodeHeight) {
+                Game.handleNodeClick(node);
+                return;
+            }
+        }
+    },
+
+    getNodePosition(node) {
+        if (!node) return { x: 0, y: 0 };
+
+        const gs = Game.state;
+        const canvasWidth = this.canvas.width;
+        const startX = (canvasWidth - this.nodeWidth) / 2;
+
+        // 计算节点的深度相对于当前节点
+        const depthFromCurrent = this.getDepthFromNode(gs.currentNode, node);
+        const baseY = 80 + depthFromCurrent * (this.nodeHeight + this.levelOffset);
+
+        // X位置根据路径计算
+        let offsetX = 0;
+        let current = gs.currentNode;
+        while (current && current !== node) {
+            // 找到node是current的左还是右子节点
+            if (current.left && this.isNodeInSubtree(current.left, node)) {
+                offsetX -= this.nodeWidth + 20;
+                current = current.left;
+            } else {
+                offsetX += this.nodeWidth + 20;
+                current = current.right;
+            }
+        }
+
+        const baseX = startX + offsetX;
+        return { x: baseX, y: baseY };
+    },
+
+    getDepthFromNode(from, to) {
+        if (!from || !to) return 0;
+        if (from === to) return 0;
+
+        // 计算to在from的子树中的深度
+        const fromDepth = this.getNodeDepth(from);
+        const toDepth = this.getNodeDepth(to);
+        return toDepth - fromDepth;
+    },
+
+    getNodeDepth(node) {
+        if (!node) return 0;
+        let depth = 0;
+        let current = node;
+        while (current) {
+            depth++;
+            current = current.parent;
+        }
+        return depth;
+    },
+
+    isNodeInSubtree(root, target) {
+        if (!root || !target) return false;
+        if (root === target) return true;
+        return this.isNodeInSubtree(root.left, target) || this.isNodeInSubtree(root.left, target);
     },
 
     drawMap() {
         const gs = Game.state;
-        const ctx = this.ctx;
+        if (!gs || !gs.mapTree) return;
 
+        const ctx = this.ctx;
         ctx.fillStyle = '#1a0a2e';
         ctx.fillRect(0, 0, 440, 440);
 
-        const tileSize = 44;
-        const offset = 0;
+        const canMove = Game.canMove();
+        const availableNodes = canMove ? Game.getAvailableNodes() : [];
 
-        for (let y = 0; y < 10; y++) {
-            for (let x = 0; x < 10; x++) {
-                const px = offset + x * tileSize;
-                const py = offset + y * tileSize;
-                const tile = gs.map[y][x];
-                const explored = gs.explored[y][x];
+        // 绘制连接线
+        this.drawConnections(gs.mapTree, null, canMove);
 
-                ctx.strokeStyle = '#3d2a5d';
-                ctx.strokeRect(px, py, tileSize, tileSize);
+        // 绘制节点
+        this.drawNodes(gs.mapTree, canMove, availableNodes);
+    },
 
-                if (!explored) {
-                    ctx.fillStyle = '#0d0518';
-                    ctx.fillRect(px + 1, py + 1, tileSize - 2, tileSize - 2);
-                    continue;
-                }
+    drawConnections(node, parent, canMove) {
+        if (!node) return;
+        const ctx = this.ctx;
 
-                ctx.fillStyle = '#2d1b3d';
-                ctx.fillRect(px + 1, py + 1, tileSize - 2, tileSize - 2);
+        if (parent) {
+            const parentPos = this.getNodePosition(parent);
+            const nodePos = this.getNodePosition(node);
 
-                if (tile.type === 'start') {
-                    this.drawRune(px + tileSize/2, py + tileSize/2, '#44ff44');
-                } else if (tile.type === 'exit') {
-                    this.drawRune(px + tileSize/2, py + tileSize/2, '#ffd700');
-                } else if (tile.type === 'enemy' && tile.revealed) {
-                    this.drawEnemyIcon(px + tileSize/2, py + tileSize/2, tile.enemy.name);
-                } else if (tile.type === 'reward' && tile.revealed) {
-                    this.drawChest(px + tileSize/2, py + tileSize/2);
-                } else if (tile.type === 'danger' && tile.revealed) {
-                    this.drawDanger(px + tileSize/2, py + tileSize/2);
-                }
-            }
+            ctx.strokeStyle = node.visited ? '#4a3a6a' : '#2a1a4a';
+            ctx.lineWidth = node.visited ? 3 : 2;
+
+            // 画连接线
+            ctx.beginPath();
+            ctx.moveTo(parentPos.x + this.nodeWidth / 2, parentPos.y + this.nodeHeight);
+            ctx.lineTo(nodePos.x + this.nodeWidth / 2, nodePos.y);
+            ctx.stroke();
         }
 
-        const playerPx = offset + gs.playerX * tileSize + tileSize/2;
-        const playerPy = offset + gs.playerY * tileSize + tileSize/2;
-        this.drawPlayer(playerPx, playerPy);
+        // 只绘制可见的子节点（当前节点的下2层）
+        if (parent) {
+            const depthFromCurrent = this.getDepthFromNode(Game.state.currentNode, node);
+            if (depthFromCurrent > 2) return;
+        }
 
-        const adjacent = Game.getAdjacentTiles();
-        adjacent.forEach(({x, y}) => {
-            if (x >= 0 && x < 10 && y >= 0 && y < 10 && gs.explored[y][x]) {
-                const px = offset + x * tileSize;
-                const py = offset + y * tileSize;
-                ctx.strokeStyle = 'rgba(212,175,55,0.6)';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(px + 2, py + 2, tileSize - 4, tileSize - 4);
-                ctx.lineWidth = 1;
-            }
-        });
+        this.drawConnections(node.left, node, canMove);
+        this.drawConnections(node.right, node, canMove);
+    },
+
+    drawNodes(node, canMove, availableNodes) {
+        if (!node) return;
+        const ctx = this.ctx;
+
+        // 计算可见性
+        const gs = Game.state;
+        const depthFromCurrent = this.getDepthFromNode(gs.currentNode, node);
+        const isAvailable = availableNodes.includes(node);
+
+        const pos = this.getNodePosition(node);
+
+        // 绘制背景
+        let bgColor;
+        if (!node.revealed && !isAvailable) {
+            bgColor = '#050208';
+        } else if (isAvailable && canMove) {
+            bgColor = '#5d4b7d';
+        } else if (node.visited) {
+            bgColor = '#3d2b5d';
+        } else {
+            bgColor = '#2d1b3d';
+        }
+
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(pos.x, pos.y, this.nodeWidth, this.nodeHeight);
+
+        // 边框
+        ctx.strokeStyle = isAvailable && canMove ? '#44ff44' : '#3d2a5d';
+        ctx.lineWidth = isAvailable && canMove ? 3 : 1;
+        ctx.strokeRect(pos.x, pos.y, this.nodeWidth, this.nodeHeight);
+
+        // 绘制图标和文字
+        ctx.globalAlpha = node.revealed || isAvailable ? 1 : 0.3;
+
+        const centerX = pos.x + this.nodeWidth / 2;
+        const centerY = pos.y + this.nodeHeight / 2;
+
+        if (node.type === 'exit') {
+            this.drawRune(centerX, centerY, '#ffd700');
+        } else if (node.type === 'enemy' && node.revealed) {
+            this.drawEnemyIcon(centerX, centerY, node.enemy ? node.enemy.name : '?');
+        } else if (node.type === 'reward' && node.revealed) {
+            this.drawChest(centerX, centerY);
+        } else if (node.type === 'danger' && node.revealed) {
+            this.drawDanger(centerX, centerY);
+        } else if (node.visited) {
+            // 已访问节点显示勾
+            ctx.fillStyle = '#44ff44';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('✓', centerX, centerY + 7);
+        } else {
+            // 未访问节点显示问号
+            ctx.fillStyle = '#888';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('?', centerX, centerY + 7);
+        }
+
+        ctx.globalAlpha = 1;
+
+        // 绘制子节点
+        if (depthFromCurrent < 2) {
+            this.drawNodes(node.left, canMove, availableNodes);
+            this.drawNodes(node.right, canMove, availableNodes);
+        }
     },
 
     drawRune(x, y, color) {
